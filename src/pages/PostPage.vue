@@ -243,7 +243,7 @@ export default {
         <nav class="navbar">
           <div class="nav-left">
             <button class="back-btn">← Volver</button>
-            <div class="logo">CreatorHub</div>
+            <div class="logo">CraftyGram</div>
           </div>
           <div class="user-actions">
             <a href="#profile" class="btn btn-secondary">Mi Perfil</a>

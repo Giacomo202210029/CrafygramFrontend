@@ -7,21 +7,58 @@ export default {
       searchQuery: '',
       activeCategory: 'all',
 
-      // Creators data from backend
-      creators: [],
+      // Users data from backend
+      users: [],
       loading: false,
       error: null,
 
-      categories: ['all', 'Arte Digital', 'Música', 'Tecnología', 'Cocina']
+      categories: ['all', 'artist', 'patron'],
+
+      // Editable array of avatar URLs to replace backend avatars
+      avatarUrls: [
+        'https://media.printler.com/media/photo/193484-2.jpg?rmode=crop&width=638&height=900',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+        'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
+      ]
+    }
+  },
+
+  computed: {
+    filteredUsers() {
+      let filtered = this.users;
+
+      // Filter by category
+      if (this.activeCategory !== 'all') {
+        filtered = filtered.filter(user => user.role === this.activeCategory);
+      }
+
+      // Filter by search query
+      if (this.searchQuery) {
+        filtered = filtered.filter(user =>
+            user.profile.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+            user.username.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+            user.profile.bio.toLowerCase().includes(this.searchQuery.toLowerCase())
+        );
+      }
+
+      return filtered;
+    },
+
+    categoryLabel() {
+      return {
+        'all': 'Todos',
+        'artist': 'Artistas',
+        'patron': 'Mecenas'
+      };
     }
   },
 
   async mounted() {
-    await this.fetchCreators()
+    await this.fetchUsers()
   },
 
   methods: {
-    async fetchCreators() {
+    async fetchUsers() {
       this.loading = true
       this.error = null
 
@@ -29,17 +66,60 @@ export default {
         const response = await fetch('http://52.146.18.37:8000/api/users')
 
         if (!response.ok) {
-          throw new Error('Error al cargar los creadores')
+          throw new Error('Error al cargar los usuarios')
         }
 
         const data = await response.json()
-        this.creators = data
+
+        // Replace avatar URLs with our custom ones
+        this.users = data.map((user, index) => ({
+          ...user,
+          profile: {
+            ...user.profile,
+            avatar_url: this.avatarUrls[index % this.avatarUrls.length]
+          }
+        }))
       } catch (error) {
         this.error = error.message
-        console.error('Error fetching creators:', error)
+        console.error('Error fetching users:', error)
       } finally {
         this.loading = false
       }
+    },
+
+    getUserInitials(name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase();
+    },
+
+    getRandomColor() {
+      const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe'];
+      return colors[Math.floor(Math.random() * colors.length)];
+    },
+
+    formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    },
+
+    viewProfile(user) {
+
+      const userId = user._id;
+      this.$router.push(`/creator/${userId}`)
+
+    },
+
+    getRoleLabel(role) {
+      return role === 'artist' ? 'Artista' : 'Patrocinador';
+    },
+
+    handleImageError(event, user) {
+      // If image fails to load, hide it and show initials instead
+      event.target.style.display = 'none';
+      user.profile.avatar_url = null;
     }
   }
 }
@@ -75,7 +155,7 @@ export default {
           <input
               v-model="searchQuery"
               type="text"
-              placeholder="Buscar creadores..."
+              placeholder="Buscar por nombre, usuario o biografía..."
               class="search-input"
           >
           <button class="search-btn">Buscar</button>
@@ -86,7 +166,7 @@ export default {
     <!-- Main Content -->
     <main class="main-content">
       <div class="container">
-        <h2 class="section-title">Creadores Destacados</h2>
+        <h2 class="section-title">Comunidad CreatorHub</h2>
 
         <!-- Category Filter -->
         <div class="category-filter">
@@ -96,47 +176,94 @@ export default {
               @click="activeCategory = category"
               :class="['category-btn', { active: activeCategory === category }]"
           >
-            {{ category === 'all' ? 'Todos' : category }}
+            {{ categoryLabel[category] }}
           </button>
         </div>
 
-        <!-- Creators Grid -->
-        <div class="creators-grid">
+        <!-- Loading State -->
+        <div v-if="loading" class="loading-state">
+          <div class="spinner"></div>
+          <p>Cargando usuarios...</p>
+        </div>
+
+        <!-- Error State -->
+        <div v-if="error" class="error-state">
+          <p>{{ error }}</p>
+          <button @click="fetchUsers" class="btn btn-primary">Reintentar</button>
+        </div>
+
+        <!-- Users Grid -->
+        <div v-if="!loading && !error" class="users-grid">
           <div
-              v-for="creator in creators"
-              :key="creator.id"
-              class="creator-card"
+              v-for="user in filteredUsers"
+              :key="user._id"
+              class="user-card"
           >
-            <div class="creator-banner" :style="{ background: creator.bannerColor }">
-              <div class="creator-avatar">{{ creator.avatar }}</div>
+            <div class="user-banner" :style="{ background: getRandomColor() }">
+              <div class="user-avatar">
+                <img v-if="user.profile.avatar_url && user.profile.avatar_url !== '/media/avatars/...'"
+                     :src="user.profile.avatar_url"
+                     :alt="user.profile.name"
+                     class="avatar-img">
+                <span v-else class="avatar-initials">{{ getUserInitials(user.profile.name) }}</span>
+              </div>
+              <div class="role-badge" :class="user.role">
+                {{ getRoleLabel(user.role) }}
+              </div>
             </div>
 
-            <div class="creator-info">
-              <h3 class="creator-name">{{ creator.name }}</h3>
-              <p class="creator-category">{{ creator.category }}</p>
-              <p class="creator-description">{{ creator.description }}</p>
+            <div class="user-info">
+              <h3 class="user-name">{{ user.profile.name }}</h3>
+              <p class="user-username">@{{ user.username }}</p>
+              <p class="user-bio">{{ user.profile.bio }}</p>
 
-              <div class="creator-stats">
-                <div class="stat">
-                  <span class="stat-number">{{ creator.patrons }}</span>
-                  <span class="stat-label">Patrocinadores</span>
+              <div class="user-details">
+                <div class="detail-item">
+                  <span class="detail-label">Universidad:</span>
+                  <span class="detail-value">{{ user.profile.university }}</span>
                 </div>
-                <div class="stat">
-                  <span class="stat-number">${{ creator.monthlyGoal }}</span>
-                  <span class="stat-label">Meta mensual</span>
+                <div class="detail-item">
+                  <span class="detail-label">Miembro desde:</span>
+                  <span class="detail-value">{{ formatDate(user.created_at) }}</span>
                 </div>
               </div>
 
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: (creator.patrons / creator.monthlyGoal * 100) + '%' }"></div>
+              <div class="social-links" v-if="user.profile.social_links">
+                <a v-if="user.profile.social_links.instagram"
+                   :href="'https://instagram.com/' + user.profile.social_links.instagram.replace('@', '')"
+                   target="_blank"
+                   class="social-link instagram">
+                  📷 Instagram
+                </a>
+                <a v-if="user.profile.social_links.tiktok"
+                   :href="user.profile.social_links.tiktok"
+                   target="_blank"
+                   class="social-link tiktok">
+                  🎵 TikTok
+                </a>
               </div>
 
-              <div class="creator-actions">
-                <button class="btn btn-primary">Convertirme en Patrón</button>
-                <button class="btn btn-secondary">Ver Perfil</button>
+              <div class="user-actions">
+                <button v-if="user.role === 'artist'" class="btn btn-primary">
+                  Convertirme en Patrón
+                </button>
+                <button v-else class="btn btn-secondary">
+                  Ver Artistas
+                </button>
+                <button @click="viewProfile(user)"
+                        class="btn btn-outline">
+                  Ver Perfil
+                </button>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="!loading && !error && filteredUsers.length === 0" class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <h3>No se encontraron usuarios</h3>
+          <p>Intenta cambiar los filtros o el término de búsqueda</p>
         </div>
 
         <!-- Featured Content Section -->
@@ -146,21 +273,21 @@ export default {
             <div class="content-card">
               <div class="content-image">🎨</div>
               <h3>Tutorial: Pintura Digital</h3>
-              <p>Aprende técnicas avanzadas de pintura digital con Ana García</p>
+              <p>Aprende técnicas avanzadas de pintura digital con nuestros artistas</p>
               <span class="content-tag">Exclusivo para Patrones</span>
             </div>
 
             <div class="content-card">
               <div class="content-image">🎵</div>
               <h3>Nueva Canción: "Caminos"</h3>
-              <p>Escucha en primicia la nueva composición de Carlos Música</p>
+              <p>Escucha en primicia las nuevas composiciones de nuestros músicos</p>
               <span class="content-tag">Acceso Anticipado</span>
             </div>
 
             <div class="content-card">
               <div class="content-image">💻</div>
-              <h3>Curso: React Avanzado</h3>
-              <p>Domina React con este curso completo de Tech Explica</p>
+              <h3>Curso: Diseño Gráfico</h3>
+              <p>Domina las herramientas de diseño con nuestros expertos</p>
               <span class="content-tag">Serie Completa</span>
             </div>
           </div>
@@ -179,7 +306,7 @@ export default {
           <div class="footer-section">
             <h4>Comunidad</h4>
             <a href="#">Creadores</a>
-            <a href="#">Patrocinadores</a>
+            <a href="#">Mecenas</a>
             <a href="#">Blog</a>
           </div>
           <div class="footer-section">
@@ -310,6 +437,17 @@ export default {
   color: white;
 }
 
+.btn-outline {
+  background: transparent;
+  color: #333;
+  border: 2px solid #e0e0e0;
+}
+
+.btn-outline:hover {
+  background: #f5f5f5;
+  border-color: #333;
+}
+
 /* Hero Section */
 .hero {
   padding: 4rem 0;
@@ -414,15 +552,51 @@ export default {
   transform: translateY(-2px);
 }
 
-/* Creators Grid */
-.creators-grid {
+/* Loading and Error States */
+.loading-state, .error-state {
+  text-align: center;
+  padding: 3rem;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-state {
+  color: #e74c3c;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+/* Users Grid */
+.users-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 2rem;
   margin-bottom: 4rem;
 }
 
-.creator-card {
+.user-card {
   background: white;
   border-radius: 20px;
   overflow: hidden;
@@ -430,17 +604,17 @@ export default {
   transition: all 0.3s ease;
 }
 
-.creator-card:hover {
+.user-card:hover {
   transform: translateY(-10px);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
-.creator-banner {
+.user-banner {
   height: 150px;
   position: relative;
 }
 
-.creator-avatar {
+.user-avatar {
   width: 80px;
   height: 80px;
   border-radius: 50%;
@@ -453,80 +627,125 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #667eea;
+  overflow: hidden;
 }
 
-.creator-info {
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-initials {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.role-badge {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+}
+
+.role-badge.artist {
+  background: linear-gradient(45deg, #f093fb, #f5576c);
+}
+
+.role-badge.patron {
+  background: linear-gradient(45deg, #4facfe, #00f2fe);
+}
+
+.user-info {
   padding: 3rem 1.5rem 1.5rem;
 }
 
-.creator-name {
+.user-name {
   font-size: 1.3rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
   color: #333;
 }
 
-.creator-category {
+.user-username {
   color: #667eea;
   font-weight: 600;
   margin-bottom: 1rem;
   font-size: 0.9rem;
 }
 
-.creator-description {
+.user-bio {
   color: #666;
   line-height: 1.6;
   margin-bottom: 1.5rem;
 }
 
-.creator-stats {
-  display: flex;
-  justify-content: space-around;
+.user-details {
   margin-bottom: 1.5rem;
-  padding: 1rem;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
   background: #f8f9fa;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
-.stat {
-  text-align: center;
-}
-
-.stat-number {
-  display: block;
-  font-size: 1.2rem;
-  font-weight: 700;
+.detail-label {
+  font-weight: 600;
   color: #333;
 }
 
-.stat-label {
-  font-size: 0.8rem;
+.detail-value {
   color: #666;
 }
 
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #e0e0e0;
-  border-radius: 4px;
-  overflow: hidden;
+.social-links {
+  display: flex;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(45deg, #667eea, #764ba2);
-  transition: width 0.3s ease;
+.social-link {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
-.creator-actions {
+.social-link.instagram {
+  background: linear-gradient(45deg, #f093fb, #f5576c);
+  color: white;
+}
+
+.social-link.tiktok {
+  background: linear-gradient(45deg, #ff0050, #ff4081);
+  color: white;
+}
+
+.social-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.user-actions {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.creator-actions .btn {
+.user-actions .btn {
   flex: 1;
   min-width: 120px;
 }
@@ -628,11 +847,15 @@ export default {
     font-size: 2.5rem;
   }
 
-  .creators-grid {
+  .users-grid {
     grid-template-columns: 1fr;
   }
 
-  .creator-actions {
+  .user-actions {
+    flex-direction: column;
+  }
+
+  .social-links {
     flex-direction: column;
   }
 }

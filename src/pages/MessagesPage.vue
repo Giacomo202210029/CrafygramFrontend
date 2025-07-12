@@ -120,7 +120,7 @@ const addEmoji = (emoji) => {
     <header class="header">
       <div class="container">
         <nav class="navbar">
-          <div class="logo">CreatorHub</div>
+          <div class="logo">CraftyGram</div>
           <div class="nav-center">
             <h1 class="page-title">Mensajes</h1>
           </div>
